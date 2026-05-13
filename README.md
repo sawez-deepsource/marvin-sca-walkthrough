@@ -61,10 +61,18 @@ opposite verdict (one correct, one wrong).
 
 ## Running it
 
+`walk.go` imports private marvin-sca packages, so the program needs Go module
+context that resolves those imports. The easiest way is to invoke `go run`
+from inside a marvin-sca checkout:
+
 ```bash
-# From the repo root
-go run ./walk.go
+# from a marvin-sca checkout (gives the module context for the imports)
+go run /path/to/marvin-sca-walkthrough/walk.go
 ```
+
+Fixture paths inside `walk.go` are resolved relative to the source file
+itself (via `runtime.Caller`), so the cwd doesn't matter — only that it
+provides module resolution for the marvin-sca imports.
 
 This will print, for each scenario:
 

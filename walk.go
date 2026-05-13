@@ -10,13 +10,19 @@
 //   7. Per-vuln walk trace — node lookup, isSeed check, ancestor walk, decision
 //   8. The production filter's answer for confirmation
 //
-// Run with: go run ./walk.go
+// Run with: go run /path/to/walkthrough/walk.go
+// Must be invoked from a directory whose go.mod resolves the marvin-sca
+// import (e.g. from inside a marvin-sca checkout). Fixture paths are
+// resolved relative to this source file's location (via runtime.Caller),
+// so the program works regardless of which cwd you invoke it from.
 package main
 
 import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -26,11 +32,23 @@ import (
 	dg "github.com/DeepSourceCorp/marvin-sca/pkg/dependency-graph"
 )
 
+// repoRoot is the directory this walk.go file lives in, computed at startup.
+// Using it for fixture paths makes the program work regardless of the cwd
+// `go run` was invoked from (cwd needs to be inside a Go module for import
+// resolution; that's a separate constraint from where the fixtures live).
+var repoRoot = func() string {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return "."
+	}
+	return filepath.Dir(file)
+}()
+
 func main() {
 	runScenario(
 		"SCENARIO A — LEAK CASE (sibling pollution)",
-		"./leak",
-		"./leak/packages/safe-app/package.json",
+		filepath.Join(repoRoot, "leak"),
+		filepath.Join(repoRoot, "leak/packages/safe-app/package.json"),
 		"lodash", "4.17.10",
 		"expected: DROP (lodash belongs to vuln-app, not safe-app)",
 	)
@@ -39,8 +57,8 @@ func main() {
 
 	runScenario(
 		"SCENARIO B — M3 CROSS-WORKSPACE TRANSITIVE",
-		"./m3",
-		"./m3/packages/a/package.json",
+		filepath.Join(repoRoot, "m3"),
+		filepath.Join(repoRoot, "m3/packages/a/package.json"),
 		"lodash", "4.17.10",
 		"expected: KEEP (a → m3-b → lodash chain).  Reality: gets DROPPED ← the bug",
 	)
