@@ -59,31 +59,95 @@ to `m3-b`, so the vuln gets dropped as a false negative.
 Same code path as Scenario A; same graph shape; different ground truth →
 opposite verdict (one correct, one wrong).
 
-## Running it
+## Running it locally
 
-`walk.go` imports private marvin-sca packages, so the program needs Go module
-context that resolves those imports. The easiest way is to invoke `go run`
-from inside a marvin-sca checkout:
+Two ways to inspect the graph + filter behavior on these fixtures. Both
+assume you have **the `marvin-sca` codebase checked out locally** (the
+`debug` branch with the leak fix + TEMP DEBUG scaffolding).
+
+Replace `<WALKTHROUGH>` and `<MARVIN_SCA>` below with your actual paths.
+
+---
+
+### Mode 1 — `walk.go` (standalone diagnostic, pretty trees + walk trace)
 
 ```bash
-# from a marvin-sca checkout (gives the module context for the imports)
-go run /path/to/marvin-sca-walkthrough/walk.go
+# From the marvin-sca checkout (gives the Go module context for the imports)
+cd <MARVIN_SCA>
+go run <WALKTHROUGH>/walk.go
 ```
 
-Fixture paths inside `walk.go` are resolved relative to the source file
-itself (via `runtime.Caller`), so the cwd doesn't matter — only that it
-provides module resolution for the marvin-sca imports.
+Prints, for each scenario:
 
-This will print, for each scenario:
-
-1. The fixture layout on disk
+1. Fixture layout on disk
 2. What the lockfile literally says (`packages["..."]` entries)
 3. The ideal graph the lockfile implies (per-member edges intact)
-4. The actual graph the autofix builder produces (after the collapse)
+4. The actual graph the autofix builder produces (post-collapse)
 5. The collapse diff (lockfile edges vs graph edges)
-6. The target manifest's direct deps + the seed set in the graph
-7. A step-by-step walk trace of the filter's decision for `lodash@4.17.10`
+6. The target manifest's direct deps + the computed seed set
+7. A step-by-step walk trace for `lodash@4.17.10`
 8. The production filter's confirmed verdict
+
+### Mode 2 — run the actual `marvin-sca` binary against any fixture
+
+Build once:
+
+```bash
+cd <MARVIN_SCA>
+go build -o /tmp/marvin-sca ./cmd/
+```
+
+Then run against a fixture target (example: `leak/packages/safe-app`):
+
+```bash
+rm -rf /tmp/toolbox && mkdir -p /tmp/toolbox
+cat > /tmp/toolbox/analysis_config.json <<EOF
+{
+  "sca_targets": [{
+    "lockfile":        "<WALKTHROUGH>/leak/package-lock.json",
+    "manifest":        "<WALKTHROUGH>/leak/packages/safe-app/package.json",
+    "ecosystem":       "npm",
+    "package_manager": "npm"
+  }],
+  "files": ["<WALKTHROUGH>/leak/packages/safe-app/package.json"]
+}
+EOF
+TOOLBOX_PATH=/tmp/toolbox /tmp/marvin-sca 2>&1 | grep "TEMP DEBUG"
+```
+
+`TEMP DEBUG` lines are emitted from inside marvin-sca itself (via the
+scaffolding in `pkg/analyzer/temp_debug_dump.go` on the `debug` branch).
+You'll see:
+
+- A full graph dump after `BuildDependencyGraph` (nodes with parents/
+  children/IsDirect/IsDev/Constraint; orphan nodes marked with `⚠`).
+- The seed set for the target.
+- One line per vulnerability with the filter's KEEP / DROP decision and
+  the reason (`IS a seed`, `walking ancestors → DROP`, etc.).
+
+Repeat with any of the other fixture manifests by changing the `manifest`
+field. Quick references:
+
+| Scenario | Lockfile | Manifests |
+|---|---|---|
+| Sibling leak | `<WALKTHROUGH>/leak/package-lock.json` | `leak/packages/{safe-app,vuln-app}/package.json` |
+| Cross-workspace transitive | `<WALKTHROUGH>/m3/package-lock.json` | `m3/packages/{a,b}/package.json` |
+| Non-workspace single-repo | `<WALKTHROUGH>/research/single/package-lock.json` | `research/single/package.json` |
+| Custom workspace layout (apps/*) | `<WALKTHROUGH>/research/custom-layout/package-lock.json` | `research/custom-layout/apps/{safe,vuln}/package.json` |
+| Workspace-name collision | `<WALKTHROUGH>/research/collision/package-lock.json` | `research/collision/packages/consumer/package.json` |
+| Deep chain (a → b → c → vuln) | `<WALKTHROUGH>/research/deep/package-lock.json` | `research/deep/packages/{a,b,c}/package.json` |
+
+To see the slog signals from the filter alongside the TEMP DEBUG dumps,
+drop the `| grep`:
+
+```bash
+TOOLBOX_PATH=/tmp/toolbox /tmp/marvin-sca 2>&1
+```
+
+By default marvin-sca runs at `slog.LevelWarn`, so the filter's INFO-level
+signals (`Workspace target detected`, `Workspace scoping enabled`) won't
+show. To see them, build with `slog.LevelInfo` in `<MARVIN_SCA>/cmd/main.go`
+temporarily.
 
 **Important — `walk.go` depends on the private `marvin-sca` Go module**
 (`github.com/DeepSourceCorp/marvin-sca/pkg/analyzer` and friends). Outside the
