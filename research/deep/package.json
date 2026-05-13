@@ -1,0 +1,1 @@
+{"name": "deep-root", "private": true, "workspaces": ["packages/*"]}

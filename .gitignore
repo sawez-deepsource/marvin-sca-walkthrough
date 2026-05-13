@@ -1,0 +1,11 @@
+# Per-run output files — regeneratable by running walk.go / marvin-sca
+# (excluded because they contain local filesystem paths)
+logs/
+research/logs/
+*.stderr
+*.stdout
+*.jsonl
+
+# Local Go module cache / build artifacts if any
+node_modules/
+*.exe

@@ -1,0 +1,1 @@
+{"name": "collision-root", "private": true, "workspaces": ["packages/*"]}

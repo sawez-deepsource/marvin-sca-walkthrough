@@ -1,0 +1,1 @@
+{"name": "leak-root", "private": true, "workspaces": ["packages/*"]}
